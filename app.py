@@ -20,6 +20,10 @@ app.add_middleware(
 )
 
 # Mount images Files
+os.makedirs("images", exist_ok=True)
+os.makedirs("images/upload/recommendation", exist_ok=True)
+os.makedirs("images/results/recommendation", exist_ok=True)
+
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
 import os
