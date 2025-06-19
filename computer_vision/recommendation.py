@@ -4,66 +4,39 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import shutil
 import numpy as np
 from PIL import Image
-from sklearn.neighbors import NearestNeighbors
 from fastapi import UploadFile, File
 from fastapi.responses import JSONResponse
 
-# Try to import TensorFlow, handle if not available
 # Skip TensorFlow completely for deployment
 TENSORFLOW_AVAILABLE = False
 print("⚠️ TensorFlow disabled - using simplified mode for deployment")
 
 # API URL configuration
-import os
-# Use environment variable for production, fallback to localhost for development
-apiUrl = os.getenv('RENDER_EXTERNAL_URL', 'http://0.0.0.0:8000')
-if apiUrl == 'http://0.0.0.0:8000':
-    # Running locally
-    apiUrl = 'http://localhost:8000'
+apiUrl = os.getenv('RENDER_EXTERNAL_URL', 'http://localhost:8000')
 
 user_img_path_recommend = 'images/upload/recommendation/user_image.jpg'
 recommended_img_path = 'images/results/recommendation/'
 
-# Load pre-trained model (handle if not available)
 # Skip model loading for deployment
 feature_extractor = None
 print("⚠️ Model loading disabled for deployment compatibility")
 
 classes = {'0': 'Trousers', '1': 'Dress', '2': 'Sweater', '3': 'T-shirt', '4': 'Top', '5': 'Blouse'}
 
-# Load database embeddings, labels, and paths (handle if not available)
-try:
-    database_embeddings = np.load('data/embeddings/embeddings.npy')
-    database_labels = np.load('data/embeddings/labels.npy')
-    paths = np.load('data/embeddings/paths.npy')
-    ids = [path[-13: -4] for path in paths]
-    
-    # Create a dictionary instead of DataFrame
-    data = {
-        'id': list(ids),
-        'embedding': list(database_embeddings),
-        'label': list(database_labels),
-        'path': list(paths)
-    }
-    print("✅ Real data loaded successfully")
-    
-except Exception as e:
-    print(f"⚠️ Could not load data files: {e}")
-    print("🔄 Creating demo data for deployment...")
-    
-    # Create demo data that works for testing
-    demo_embeddings = [np.random.rand(512).tolist() for _ in range(30)]
-    demo_labels = ['0', '1', '2', '3', '4', '5'] * 5
-    demo_paths = [f'images/demo/item_{i}.jpg' for i in range(30)]
-    demo_ids = [f'demo_{i:03d}' for i in range(30)]
-    
-    data = {
-        'id': demo_ids,
-        'embedding': demo_embeddings,
-        'label': demo_labels,
-        'path': demo_paths
-    }
-    print("✅ Demo data created successfully")
+# Create demo data for testing
+print("🔄 Creating demo data for deployment...")
+demo_embeddings = [np.random.rand(512).tolist() for _ in range(30)]
+demo_labels = ['0', '1', '2', '3', '4', '5'] * 5
+demo_paths = [f'images/demo/item_{i}.jpg' for i in range(30)]
+demo_ids = [f'demo_{i:03d}' for i in range(30)]
+
+data = {
+    'id': demo_ids,
+    'embedding': demo_embeddings,
+    'label': demo_labels,
+    'path': demo_paths
+}
+print("✅ Demo data created successfully")
 
 # Valid combinations for recommendations
 valid_combinations = {
@@ -76,34 +49,26 @@ valid_combinations = {
 }
 
 # ===| Helper functions |===
-# Image preprocessing
 def preprocess_image(image_path, image_size=(224, 224)):
-    image = Image.open(image_path).convert('RGB')
-    image = image.resize(image_size)
-    image_array = np.array(image) / 255.0  # Normalize to [0, 1]
-    return np.expand_dims(image_array, axis=0)  # Add batch dimension
-
-# Extract features
-def extract_features(image_path, model):
-    if model is None:
-        # Return dummy features for testing when model is not available
-        print("🔄 Using dummy features (no model available)")
-        return np.random.rand(1, 6), np.random.randint(0, 6)
-    
+    """Image preprocessing"""
     try:
-        preprocessed_image = preprocess_image(image_path)
-        query_image_embeddings = model.predict(preprocessed_image)
-        query_image_class = np.argmax(query_image_embeddings, axis=1)[0]
-        return query_image_embeddings, query_image_class
+        image = Image.open(image_path).convert('RGB')
+        image = image.resize(image_size)
+        image_array = np.array(image) / 255.0  # Normalize to [0, 1]
+        return np.expand_dims(image_array, axis=0)  # Add batch dimension
     except Exception as e:
-        print(f"⚠️ Error in feature extraction: {e}")
-        return np.random.rand(1, 6), np.random.randint(0, 6)
+        print(f"⚠️ Error preprocessing image: {e}")
+        return np.random.rand(1, 224, 224, 3)
 
-# Get valid items (updated to work with dictionary instead of DataFrame)
+def extract_features(image_path, model):
+    """Extract features from image"""
+    print("🔄 Using dummy features (no model available)")
+    return np.random.rand(1, 6), np.random.randint(0, 6)
+
 def get_valid_items(input_class, data):
+    """Get valid items based on input class"""
     valid_classes = valid_combinations.get(input_class, [])
     
-    # Work with dictionary instead of DataFrame
     valid_items_embeddings = []
     valid_items_labels = []
     valid_items_paths = []
@@ -122,76 +87,72 @@ def get_valid_items(input_class, data):
         valid_items_labels = data['label'][:10]
         valid_items_paths = data['path'][:10]
     
-    if not valid_items_embeddings:
-        return np.array([]), [], []
-    
     return np.array(valid_items_embeddings), valid_items_labels, valid_items_paths
 
-def knn_recommend(query_embedding, valid_items_embeddings, valid_items_labels, valid_items_paths, k=5):
+def cosine_similarity(a, b):
+    """Calculate cosine similarity between two vectors"""
+    try:
+        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    except:
+        return 0.5  # Return neutral similarity if calculation fails
+
+def simple_knn_recommend(query_embedding, valid_items_embeddings, valid_items_labels, valid_items_paths, k=5):
+    """Simple KNN recommendation without scikit-learn"""
     if len(valid_items_embeddings) == 0:
         return []
     
-    # Ensure we don't ask for more neighbors than we have items
     k = min(k, len(valid_items_embeddings))
     
     try:
-        knn_model = NearestNeighbors(n_neighbors=k, metric='cosine')
-        knn_model.fit(valid_items_embeddings)
-        distances, indices = knn_model.kneighbors(query_embedding)
-
-        recommended_paths = [valid_items_paths[idx] for idx in indices[0]]
+        # Calculate similarities manually
+        similarities = []
+        query_flat = query_embedding.flatten()
+        
+        for i, item_embedding in enumerate(valid_items_embeddings):
+            item_flat = np.array(item_embedding).flatten()
+            # Ensure same dimensions
+            min_len = min(len(query_flat), len(item_flat))
+            similarity = cosine_similarity(query_flat[:min_len], item_flat[:min_len])
+            similarities.append((similarity, i))
+        
+        # Sort by similarity (highest first)
+        similarities.sort(reverse=True)
+        top_k_indices = [idx for _, idx in similarities[:k]]
+        top_k_similarities = [sim for sim, _ in similarities[:k]]
+        
+        recommended_paths = [valid_items_paths[idx] for idx in top_k_indices]
         
         paths = []
         # Create destination directory if it doesn't exist
         os.makedirs(recommended_img_path, exist_ok=True)
         
-        # Save recommended images to the designated folder
+        # Create placeholder images
         for i, file_path in enumerate(recommended_paths):
             dest_path = f'{recommended_img_path}recommended_{i}.jpg'
             
-            # Handle different path formats
-            if file_path.startswith('images/demo/'):
-                # For demo data, create a placeholder image
-                try:
-                    from PIL import Image
-                    placeholder = Image.new('RGB', (224, 224), color='lightgray')
-                    placeholder.save(dest_path)
-                    print(f"✅ Created placeholder image: {dest_path}")
-                except Exception as e:
-                    print(f"⚠️ Could not create placeholder: {e}")
-            else:
-                # For real data, try to copy the image
-                try:
-                    img_path = file_path[3:] if file_path.startswith('../') else file_path
-                    shutil.copy(img_path, dest_path)
-                    print(f"✅ Copied image: {img_path} -> {dest_path}")
-                except Exception as e:
-                    print(f"⚠️ Could not copy image {img_path}: {e}")
-                    # Create placeholder if copy fails
-                    try:
-                        from PIL import Image
-                        placeholder = Image.new('RGB', (224, 224), color='lightblue')
-                        placeholder.save(dest_path)
-                    except:
-                        pass
+            try:
+                # Create a simple placeholder image
+                placeholder = Image.new('RGB', (224, 224), color=(200, 200, 200))
+                placeholder.save(dest_path)
+                print(f"✅ Created placeholder image: {dest_path}")
+            except Exception as e:
+                print(f"⚠️ Could not create placeholder: {e}")
             
             paths.append(dest_path)
 
         recommended_labels_name = []
-        ind = indices[0].tolist()
-
-        for i in ind:
-            num = valid_items_labels[i]
+        for idx in top_k_indices:
+            num = valid_items_labels[idx]
             recommended_labels_name.append(classes.get(str(num), 'Unknown'))
 
-        print(f"🎯 Distances: {distances}")
+        print(f"🎯 Similarities: {top_k_similarities}")
         
         # Create recommendations
         recommendations = [
             {
-                'similarity': str(distances[0][i]),  # Convert similarity to a string
-                'path': f'{apiUrl}/{paths[i]}', # Use the original path of the image
-                'label': recommended_labels_name[i] # Ensure labels are strings
+                'similarity': str(1 - top_k_similarities[i]),  # Convert to distance-like metric
+                'path': f'{apiUrl}/{paths[i]}',
+                'label': recommended_labels_name[i]
             }
             for i in range(len(paths))
         ]
@@ -203,6 +164,7 @@ def knn_recommend(query_embedding, valid_items_embeddings, valid_items_labels, v
         return []
 
 def recommend_outfit(file: UploadFile = File(...)):
+    """Main recommendation function"""
     try:
         # Extract features
         query_image_embeddings, query_image_class = extract_features(user_img_path_recommend, feature_extractor)
@@ -217,8 +179,8 @@ def recommend_outfit(file: UploadFile = File(...)):
                 "message": 'No valid recommendations found for the query class'
             })
 
-        # Find recommendations
-        recommendations = knn_recommend(query_image_embeddings, valid_items_embeddings, valid_items_labels, valid_items_paths)
+        # Find recommendations using simple KNN
+        recommendations = simple_knn_recommend(query_image_embeddings, valid_items_embeddings, valid_items_labels, valid_items_paths)
 
         print(f'📂 User image path: {user_img_path_recommend}')
         print(f'🏷️ Query image class: {query_image_class}')
@@ -228,7 +190,7 @@ def recommend_outfit(file: UploadFile = File(...)):
         return JSONResponse(content={
             "user_image_class": f'{classes.get(query_image_class, "Unknown")}',
             "recommendations": recommendations,
-            "system_status": "working",
+            "system_status": "working_without_ml_libraries",
             "total_recommendations": len(recommendations)
         })
         
