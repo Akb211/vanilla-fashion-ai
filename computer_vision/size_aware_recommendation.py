@@ -6,14 +6,12 @@ import shutil
 import numpy as np
 from PIL import Image
 import cv2
-from sklearn.neighbors import NearestNeighbors
 from fastapi.responses import JSONResponse
 
-# Try to import TensorFlow
 # Skip TensorFlow completely for deployment
 TENSORFLOW_AVAILABLE = False
 print("⚠️ TensorFlow disabled for deployment compatibility")
- 
+
 # Import from your existing recommendation file
 try:
     from .recommendation import (
@@ -26,12 +24,6 @@ except ImportError:
         feature_extractor, data, classes, apiUrl, 
         user_img_path_recommend, recommended_img_path,
         preprocess_image, extract_features, get_valid_items, simple_knn_recommend
-    )
-except ImportError:
-    from computer_vision.recommendation import (
-        feature_extractor, data, classes, apiUrl, 
-        user_img_path_recommend, recommended_img_path,
-        preprocess_image, extract_features, get_valid_items, knn_recommend
     )
 
 # Size compatibility rules - this is our "AI brain" for sizes
@@ -214,13 +206,13 @@ def recommend_outfit_with_size():
         # Get valid items
         valid_items_embeddings, valid_items_labels, valid_items_paths = get_valid_items(query_image_class, data)
         
-        if valid_items_embeddings.size == 0:
+        if len(valid_items_embeddings) == 0:
             return JSONResponse(content={
                 "message": 'No valid recommendations found for the query class'
             })
         
         # Get initial recommendations (more items to filter from)
-        initial_recommendations = knn_recommend(
+        initial_recommendations = simple_knn_recommend(
             query_image_embeddings, 
             valid_items_embeddings, 
             valid_items_labels, 
