@@ -10,18 +10,22 @@ from sklearn.neighbors import NearestNeighbors
 from fastapi.responses import JSONResponse
 
 # Try to import TensorFlow
-try:
-    from tensorflow.keras.models import load_model
-    TENSORFLOW_AVAILABLE = True
-except ImportError:
-    TENSORFLOW_AVAILABLE = False
+# Skip TensorFlow completely for deployment
+TENSORFLOW_AVAILABLE = False
+print("⚠️ TensorFlow disabled for deployment compatibility")
  
 # Import from your existing recommendation file
 try:
     from .recommendation import (
         feature_extractor, data, classes, apiUrl, 
         user_img_path_recommend, recommended_img_path,
-        preprocess_image, extract_features, get_valid_items, knn_recommend
+        preprocess_image, extract_features, get_valid_items, simple_knn_recommend
+    )
+except ImportError:
+    from computer_vision.recommendation import (
+        feature_extractor, data, classes, apiUrl, 
+        user_img_path_recommend, recommended_img_path,
+        preprocess_image, extract_features, get_valid_items, simple_knn_recommend
     )
 except ImportError:
     from computer_vision.recommendation import (

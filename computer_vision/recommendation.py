@@ -9,13 +9,9 @@ from fastapi import UploadFile, File
 from fastapi.responses import JSONResponse
 
 # Try to import TensorFlow, handle if not available
-try:
-    from tensorflow.keras.models import load_model
-    TENSORFLOW_AVAILABLE = True
-    print("✅ TensorFlow available")
-except ImportError:
-    TENSORFLOW_AVAILABLE = False
-    print("⚠️ TensorFlow not available - using simplified mode")
+# Skip TensorFlow completely for deployment
+TENSORFLOW_AVAILABLE = False
+print("⚠️ TensorFlow disabled - using simplified mode for deployment")
 
 # API URL configuration
 import os
@@ -29,15 +25,9 @@ user_img_path_recommend = 'images/upload/recommendation/user_image.jpg'
 recommended_img_path = 'images/results/recommendation/'
 
 # Load pre-trained model (handle if not available)
-if TENSORFLOW_AVAILABLE:
-    try:
-        feature_extractor = load_model('models/resnest50.keras')
-        print("✅ Model loaded successfully")
-    except Exception as e:
-        print(f"⚠️ Could not load model: {e}")
-        feature_extractor = None
-else:
-    feature_extractor = None
+# Skip model loading for deployment
+feature_extractor = None
+print("⚠️ Model loading disabled for deployment compatibility")
 
 classes = {'0': 'Trousers', '1': 'Dress', '2': 'Sweater', '3': 'T-shirt', '4': 'Top', '5': 'Blouse'}
 
