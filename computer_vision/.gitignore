@@ -1,0 +1,50 @@
+# Create .gitignore file with PowerShell
+@"
+# Virtual environments (VERY IMPORTANT)
+vanilla_env/
+venv/
+.venv/
+env/
+.env/
+
+# Large model files
+models/
+*.keras
+*.pth
+*.h5
+*.pkl
+
+# Data files
+data/
+*.npy
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+user_preferences.json
+
+# Images (these can be large)
+images/results/
+images/upload/
+
+# Any large files
+*.zip
+*.tar.gz
+"@ | Out-File -FilePath ".gitignore" -Encoding UTF8
