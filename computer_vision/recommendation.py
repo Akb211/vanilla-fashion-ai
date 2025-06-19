@@ -7,7 +7,6 @@ from PIL import Image
 from sklearn.neighbors import NearestNeighbors
 from fastapi import UploadFile, File
 from fastapi.responses import JSONResponse
-import pandas as pd
 
 # Try to import TensorFlow, handle if not available
 try:
@@ -49,12 +48,13 @@ try:
     paths = np.load('data/embeddings/paths.npy')
     ids = [path[-13: -4] for path in paths]
     
-    data = pd.DataFrame({
-        'id': ids,
+    # Create a dictionary instead of DataFrame
+    data = {
+        'id': list(ids),
         'embedding': list(database_embeddings),
         'label': list(database_labels),
         'path': list(paths)
-    })
+    }
     print("✅ Real data loaded successfully")
     
 except Exception as e:
@@ -67,12 +67,12 @@ except Exception as e:
     demo_paths = [f'images/demo/item_{i}.jpg' for i in range(30)]
     demo_ids = [f'demo_{i:03d}' for i in range(30)]
     
-    data = pd.DataFrame({
+    data = {
         'id': demo_ids,
         'embedding': demo_embeddings,
         'label': demo_labels,
         'path': demo_paths
-    })
+    }
     print("✅ Demo data created successfully")
 
 # Valid combinations for recommendations
@@ -109,25 +109,33 @@ def extract_features(image_path, model):
         print(f"⚠️ Error in feature extraction: {e}")
         return np.random.rand(1, 6), np.random.randint(0, 6)
 
-# Get valid items
+# Get valid items (updated to work with dictionary instead of DataFrame)
 def get_valid_items(input_class, data):
     valid_classes = valid_combinations.get(input_class, [])
-    if not valid_classes:
-        # If no valid combinations, return some items anyway
-        valid_items = data.head(10)  # Take first 10 items
-    else:
-        valid_items = data[data['label'].isin(valid_classes)]
-        if valid_items.empty:
-            # Fallback to any items
-            valid_items = data.head(10)
     
-    if valid_items.empty:
-        return np.array([]), np.array([]), []
+    # Work with dictionary instead of DataFrame
+    valid_items_embeddings = []
+    valid_items_labels = []
+    valid_items_paths = []
     
-    valid_items_embeddings = np.stack(valid_items['embedding'])
-    valid_items_labels = valid_items['label'].tolist()
-    valid_items_paths = valid_items['path'].tolist()
-    return valid_items_embeddings, valid_items_labels, valid_items_paths
+    # Filter items based on valid classes
+    for i, label in enumerate(data['label']):
+        if str(label) in valid_classes:
+            valid_items_embeddings.append(data['embedding'][i])
+            valid_items_labels.append(data['label'][i])
+            valid_items_paths.append(data['path'][i])
+    
+    # If no valid items found, use first 10 items as fallback
+    if not valid_items_embeddings:
+        print("⚠️ No valid combinations found, using fallback items")
+        valid_items_embeddings = data['embedding'][:10]
+        valid_items_labels = data['label'][:10]
+        valid_items_paths = data['path'][:10]
+    
+    if not valid_items_embeddings:
+        return np.array([]), [], []
+    
+    return np.array(valid_items_embeddings), valid_items_labels, valid_items_paths
 
 def knn_recommend(query_embedding, valid_items_embeddings, valid_items_labels, valid_items_paths, k=5):
     if len(valid_items_embeddings) == 0:

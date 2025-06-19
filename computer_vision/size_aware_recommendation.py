@@ -8,7 +8,6 @@ from PIL import Image
 import cv2
 from sklearn.neighbors import NearestNeighbors
 from fastapi.responses import JSONResponse
-import pandas as pd
 
 # Try to import TensorFlow
 try:
