@@ -1,0 +1,26 @@
+# Ignore virtual environment directories
+venv/
+.env/
+.venv/
+.env
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore test and coverage directories
+.coverage
+*.coveragerc
+nosetests.xml
+test*.xml
+
+# Ignore PyCharm and VSCode project files
+.idea/
+.vscode/
+
+# Ignore MacOS-specific files
+.DS_Store
